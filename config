@@ -1,0 +1,6 @@
+ngx_addon_name=ngx_http_sflow_module
+HTTP_MODULES="$HTTP_MODULES ngx_http_sflow_module"
+NGX_ADDON_SRCS="$NGX_ADDON_SRCS $ngx_addon_dir/ngx_http_sflow_module.c $ngx_addon_dir/ngx_http_sflow_config.c $ngx_addon_dir/ngx_http_sflow_api.c "
+NGX_ADDON_DEPS="$NGX_ADDON_DEPS $ngx_addon_dir/ngx_http_sflow_config.h $ngx_addon_dir/ngx_http_sflow_api.h $ngx_addon_dir/ngx_http_sflow.h"
+USE_SHA1=YES
+USE_MD5=YES

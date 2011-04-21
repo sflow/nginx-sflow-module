@@ -1,0 +1,130 @@
+Copyright (c) 2011 InMon Corp. Licensed under the terms of the InMon sFlow licence:
+http://www.inmon.com/technology/sflowlicense.txt
+
+                              nginx-sflow-module
+                              ==================
+
+  A binary, random-sampling nginx module designed for:
+       lightweight,
+        centralized,
+         continuous,
+          real-time monitoring of very large and very busy web farms.
+
+Installation
+============
+	First download the nginx sources,  then tell the "./configure" script
+	that you want to add this module:
+
+        ./configure ... --add-module=/absolute/path/to/nginx-sflow-module
+        make
+        make install
+
+Configuration
+=============
+	The module picks up it's sFlow config from the file /etc/hsflowd.auto,
+	so the easiest way to configure it is to install that daemon:
+
+	http://host-sflow.sourceforge.net
+
+	Alternatively,  you could type something like this into /etc/hsflowd.auto:
+
+rev_start=1
+sampling=100
+header=128
+polling=10
+agent=eth0
+collector=127.0.0.1 6343
+rev_end=1
+
+Output
+======
+
+  The sFlow output goes to a UDP port on your sFlow collector host.
+  There you can examine it using a number of tools,  including the
+  freeware "sflowtool", which can be downloaded as source code from:
+  
+  http://www.inmon.com/technology/sflowTools.php
+
+  For example, to log all the fields in ASCII:
+ 
+  $ sflowtool
+
+  Or to log the HTTP samples in common-log-file format:
+
+  $ sflowtool -H
+
+
+Example output from sflowtool:
+
+	startDatagram =================================
+	datagramSourceIP 10.0.0.150
+	datagramSize 192
+	unixSecondsUTC 1294168545
+	datagramVersion 5
+	agentSubId 32576
+	agent 10.0.0.150
+	packetSequenceNo 7
+	sysUpTime 25000
+	samplesInPacket 1
+	startSample ----------------------
+	sampleType_tag 0:1
+	sampleType FLOWSAMPLE
+	sampleSequenceNo 1
+	sourceId 3:65537
+	meanSkipCount 400
+	samplePool 124
+	dropEvents 0
+	inputPort 0
+	outputPort 1073741823
+	flowBlock_tag 0:2100
+	extendedType socket4
+	socket4_ip_protocol 6
+	socket4_local_ip 10.0.0.150
+	socket4_remote_ip 10.0.0.70
+	socket4_local_port 80
+	socket4_remote_port 63023
+	flowBlock_tag 0:2201
+	flowSampleType http
+	http_method 2
+	http_protocol 1001
+	http_uri /membase.php
+	http_host 10.0.0.150
+	http_useragent Java/1.6.0_22
+	http_bytes 3487
+	http_duration_uS 24278
+	http_status 200
+	endSample   ----------------------
+	endDatagram   =================================
+	startDatagram =================================
+	datagramSourceIP 10.0.0.150
+	datagramSize 116
+	unixSecondsUTC 1294168501
+	datagramVersion 5
+	agentSubId 32576
+	agent 10.0.0.150
+	packetSequenceNo 3
+	sysUpTime 42000
+	samplesInPacket 1
+	startSample ----------------------
+	sampleType_tag 0:2
+	sampleType COUNTERSSAMPLE
+	sampleSequenceNo 3
+	sourceId 3:65537
+	counterBlock_tag 0:2201
+	http_method_option_count 0
+	http_method_get_count 113
+	http_method_head_count 0
+	http_method_post_count 0
+	http_method_put_count 0
+	http_method_delete_count 0
+	http_method_trace_count 0
+	http_methd_connect_count 0
+	http_method_other_count 0
+	http_status_1XX_count 0
+	http_status_2XX_count 112
+	http_status_3XX_count 0
+	http_status_4XX_count 1
+	http_status_5XX_count 0
+	http_status_other_count 0
+	endSample   ----------------------
+	endDatagram   =================================
