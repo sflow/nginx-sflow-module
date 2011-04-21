@@ -583,11 +583,14 @@ ngx_http_sflow_handler(ngx_http_request_t *r)
     else if(status < 500) SFWB_INC_CTR(ctrs->status_4XX_count);
     else if(status < 600) SFWB_INC_CTR(ctrs->status_5XX_count);    
     else SFWB_INC_CTR(ctrs->status_other_count);
-    
+
     if(sfwb_config_sampling_n(cf->sfwb->config_manager, r->connection->log) == 0) {
         /* not configured for sampling yet */
         return NGX_OK;
     }
+
+    /* increment the all-important sample_pool */
+    SFWB_INC_CTR(cf->sfwb->sampler->samplePool);
 
     if(SFWB_COUNTDOWN(cf->sfwb->sflow_skip)) {
         /* skip just went from 1 to 0, so take sample */
