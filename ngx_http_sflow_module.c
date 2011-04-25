@@ -73,9 +73,6 @@ typedef struct _SFWB {
     ngx_int_t vidx_mimetype;
     ngx_int_t vidx_authuser;
 
-    /* tick timer */
-    ngx_event_t *tick;
-
 } SFWB;
 
 typedef struct {
@@ -464,16 +461,6 @@ static void sfwb_tick(SFWB *sm, ngx_log_t *log) {
 }
 
 /*_________________---------------------------__________________
-  _________________  ngx_http_sflow_tick      __________________
-  -----------------___________________________------------------
-*/
-
-static void
-ngx_http_sflow_tick_event_handler(ngx_event_t *ev)
-{
-}
-
-/*_________________---------------------------__________________
   _________________      sfwb_init            __________________
   -----------------___________________________------------------
 */
@@ -514,18 +501,6 @@ static void sfwb_init(SFWB *sm, ngx_conf_t *cf)
     sm->vidx_mimetype = ngx_http_get_variable_index(cf, &str_mimetype);
     sm->vidx_authuser = ngx_http_get_variable_index(cf, &str_authuser);
 
-    /* set up a 1-second tick */
-    if(ngx_add_event(sm->tick, NGX_USE_TIMER_EVENT, 0) == NGX_ERROR) {
-        ngx_log_error(NGX_LOG_ERR, cf->log, 0, "ngx_add_event() failed");
-    }
-
-    sm->tick->handler = ngx_http_sflow_tick_event_handler;
-    // not sure what this is...$$$
-    // void *ident[4];
-    // ident[3] = (void *)-1;
-    // sm->tick.data = ident;
-    sm->tick->log = cf->log;
-    ngx_add_timer(sm->tick, 1000);
 }
 
 /*_________________---------------------------__________________
