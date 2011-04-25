@@ -283,7 +283,6 @@ bool_t sfwb_config_tick(SFWBConfigManager *sm, ngx_log_t *log) {
     if(--sm->configCountDown <= 0) {
         time_t modTime = sfwb_configModifiedTime(sm, log);
         sm->configCountDown = SFWB_CONFIG_CHECK_S;
-        ngx_log_debug0(NGX_LOG_DEBUG_HTTP, log, 0, "checking for config file change <%s>", sm->configFile);
         
         if(modTime == 0) {
             /* config file missing */
@@ -291,17 +290,16 @@ bool_t sfwb_config_tick(SFWBConfigManager *sm, ngx_log_t *log) {
         }
         else if(modTime != sm->configFile_modTime) {
             /* config file modified */
-            ngx_log_debug0(NGX_LOG_DEBUG_HTTP, log, 0, "config file changed <%s> t=%u", sm->configFile, (int32_t)modTime);
             SFWBConfig *newConfig = sfwb_readConfig(sm, log);
             if(newConfig) {
                 /* config OK - apply it */
-                ngx_log_debug0(NGX_LOG_DEBUG_HTTP, log, 0, "config file OK <%s>", sm->configFile);
+                ngx_log_debug0(NGX_LOG_DEBUG_HTTP, log, 0, "sFlow config file OK");
                 changed = sfwb_apply_config(sm, newConfig, log);
                 sm->configFile_modTime = modTime;
             }
             else {
                 /* bad config - ignore it (may be in transition) */
-                ngx_log_debug0(NGX_LOG_DEBUG_HTTP, log, 0, "config file parse failed <%s>", sm->configFile);
+                ngx_log_debug0(NGX_LOG_DEBUG_HTTP, log, 0, "sFlow config file parse failed");
             }
         }
     }
@@ -364,7 +362,7 @@ void sfwb_config_send_packet(SFWBConfigManager *sm,  u_char *pkt, uint32_t pktLe
     for(c = 0; c < sm->config->num_collectors; c++) {
         SFWBCollector *coll = &sm->config->collectors[c];
         socklen_t socklen;
-        int fd;
+        int fd=0;
         switch(coll->ipAddr.type) {
         case SFLADDRESSTYPE_UNDEFINED:
             /* skip over it if the forward lookup failed */
