@@ -32,9 +32,11 @@ rev_start=1
 sampling=100
 header=128
 polling=10
-agent=eth0
+agentIP=<ip-address>
 collector=127.0.0.1 6343
 rev_end=1
+
+Where <ip-address> is the local IP address that best represents this host.
 
 Output
 ======

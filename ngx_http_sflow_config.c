@@ -72,7 +72,7 @@ static bool_t sfwb_lookupAddress(char *name, struct sockaddr *sa, SFLAddress *ad
 static bool_t sfwb_syntaxOK(SFWBConfig *cfg, uint32_t line, uint32_t tokc, uint32_t tokcMin, uint32_t tokcMax, char *syntax, ngx_log_t *log) {
     if(tokc < tokcMin || tokc > tokcMax) {
         cfg->error = true;
-        ngx_log_error(NGX_LOG_ERR, log, 0, "syntax error on line %u: expected %s", line, syntax);
+        ngx_log_error(NGX_LOG_ERR, log, 0, "syntax error: expected %s on line %u", syntax, line);
         return false;
     }
     return true;
@@ -80,7 +80,7 @@ static bool_t sfwb_syntaxOK(SFWBConfig *cfg, uint32_t line, uint32_t tokc, uint3
 
 static void sfwb_syntaxError(SFWBConfig *cfg, uint32_t line, char *msg, ngx_log_t *log) {
     cfg->error = true;
-    ngx_log_error(NGX_LOG_ERR, log, 0, "syntax error on line %u: %s", line, msg);
+    ngx_log_error(NGX_LOG_ERR, log, 0, "syntax error : %s (on line %u)", msg, line);
 }    
 
 static SFWBConfig *sfwb_readConfig(SFWBConfigManager *sm, ngx_log_t *log)
@@ -120,10 +120,6 @@ static SFWBConfig *sfwb_readConfig(SFWBConfigManager *sm, ngx_log_t *log)
             tokv[tokc++] = p;
             p += len;
             if(*p != '\0') *p++ = '\0';
-        }
-
-        if(tokc >=2) {
-            ngx_log_error(NGX_LOG_ERR, log, 0, "line=%s tokc=%u", line, tokc);
         }
 
         if(tokc) {
