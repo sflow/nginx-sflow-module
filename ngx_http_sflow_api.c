@@ -1022,7 +1022,7 @@ static int computeFlowSampleSize(SFLReceiver *receiver, SFL_FLOW_SAMPLE_TYPE *fs
         default:
             {
                 char errm[MAX_ERRMSG_LEN];
-                snprintf(errm, MAX_ERRMSG_LEN, "computeFlowSampleSize(): unexpected tag (%u)", elem->tag);
+                snprintf(errm, MAX_ERRMSG_LEN, "computeFlowSampleSize(): unexpected tag (%ud)", elem->tag);
                 receiverError(receiver, errm);
                 return -1;
             }
@@ -1119,7 +1119,7 @@ int sfl_receiver_writeFlowSample(SFLReceiver *receiver, SFL_FLOW_SAMPLE_TYPE *fs
         default:
             {
                 char errm[MAX_ERRMSG_LEN];
-                snprintf(errm, MAX_ERRMSG_LEN, "sfl_receiver_writeFlowSample: unexpected tag (%u)", elem->tag);
+                snprintf(errm, MAX_ERRMSG_LEN, "sfl_receiver_writeFlowSample: unexpected tag (%ud)", elem->tag);
                 receiverError(receiver, errm);
                 return -1;
             }
@@ -1134,7 +1134,7 @@ int sfl_receiver_writeFlowSample(SFLReceiver *receiver, SFL_FLOW_SAMPLE_TYPE *fs
 
     if(encodingSize != (uint32_t)packedSize) {
         char errm[MAX_ERRMSG_LEN];
-        snprintf(errm, MAX_ERRMSG_LEN, "sfl_receiver_writeFlowSample: encoding_size(%u) != expected_size(%u)",
+        snprintf(errm, MAX_ERRMSG_LEN, "sfl_receiver_writeFlowSample: encoding_size(%ud) != expected_size(%ud)",
                      encodingSize,
                      packedSize);
         receiverError(receiver, errm);
@@ -1213,7 +1213,7 @@ int sfl_receiver_writeEncodedFlowSample(SFLReceiver *receiver, SFL_FLOW_SAMPLE_T
 
     if(encodingSize != (uint32_t)packedSize) {
         char errm[MAX_ERRMSG_LEN];
-        snprintf(errm, MAX_ERRMSG_LEN, "sfl_receiver_writeEncodedFlowSample: encoding_size(%u) != expected_size(%u) [overrideEncodingSize=%u xdrHeaderStrip=%u pktlen=%u]",
+        snprintf(errm, MAX_ERRMSG_LEN, "sfl_receiver_writeEncodedFlowSample: encoding_size(%ud) != expected_size(%ud) [overrideEncodingSize=%ud xdrHeaderStrip=%ud pktlen=%ud]",
                      encodingSize,
                      packedSize,
                      overrideEncodingSize,
@@ -1258,7 +1258,7 @@ static int computeCountersSampleSize(SFLReceiver *receiver, SFL_COUNTERS_SAMPLE_
         default:
             {
                 char errm[MAX_ERRMSG_LEN];
-                snprintf(errm, MAX_ERRMSG_LEN, "computeCounterSampleSize(): unexpected counters tag (%u)", elem->tag);
+                snprintf(errm, MAX_ERRMSG_LEN, "computeCounterSampleSize(): unexpected counters tag (%ud)", elem->tag);
                 receiverError(receiver, errm);
                 return -1;
             }
@@ -1344,7 +1344,7 @@ int sfl_receiver_writeCountersSample(SFLReceiver *receiver, SFL_COUNTERS_SAMPLE_
         default:
             {
                 char errm[MAX_ERRMSG_LEN];
-                snprintf(errm, MAX_ERRMSG_LEN, "unexpected counters tag (%u)", elem->tag);
+                snprintf(errm, MAX_ERRMSG_LEN, "unexpected counters tag (%ud)", elem->tag);
                 receiverError(receiver, errm);
                 return -1;
             }
@@ -1357,7 +1357,7 @@ int sfl_receiver_writeCountersSample(SFLReceiver *receiver, SFL_COUNTERS_SAMPLE_
         - receiver->sampleCollector.pktlen;
     if(encodingSize != (uint32_t)packedSize) {
         char errm[MAX_ERRMSG_LEN];
-        snprintf(errm, MAX_ERRMSG_LEN, "sfl_receiver_writeCountersSample: encoding_size(%u) != expected_size(%u)",
+        snprintf(errm, MAX_ERRMSG_LEN, "sfl_receiver_writeCountersSample: encoding_size(%ud) != expected_size(%ud)",
                      encodingSize,
                      packedSize);
         receiverError(receiver, errm);
