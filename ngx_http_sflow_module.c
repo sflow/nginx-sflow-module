@@ -70,6 +70,7 @@ typedef struct _SFWB {
     ngx_int_t vidx_host;
     ngx_int_t vidx_referer;
     ngx_int_t vidx_useragent;
+    ngx_int_t vidx_xff;
     ngx_int_t vidx_mimetype;
     ngx_int_t vidx_authuser;
 
@@ -232,7 +233,7 @@ static bool_t ipv4MappedAddress(SFLIPv6 *ipv6addr, SFLIPv4 *ip4addr) {
   -----------------___________________________------------------
 */
 
-static void sfwb_sample_http(SFLSampler *sampler, ngx_connection_t *connection, SFLHTTP_method method, uint32_t proto_num, ngx_http_variable_value_t *uri, ngx_http_variable_value_t *host, ngx_http_variable_value_t *referrer, ngx_http_variable_value_t *useragent, ngx_http_variable_value_t *authuser, ngx_http_variable_value_t *mimetype, uint64_t bytes, uint32_t duration_uS, uint32_t status)
+static void sfwb_sample_http(SFLSampler *sampler, ngx_connection_t *connection, SFLHTTP_method method, uint32_t proto_num, ngx_http_variable_value_t *uri, ngx_http_variable_value_t *host, ngx_http_variable_value_t *referrer, ngx_http_variable_value_t *useragent, ngx_http_variable_value_t *xff, ngx_http_variable_value_t *authuser, ngx_http_variable_value_t *mimetype, uint64_t req_bytes, uint64_t resp_bytes, uint32_t duration_uS, uint32_t status)
 {
     
     SFL_FLOW_SAMPLE_TYPE fs;
@@ -257,11 +258,14 @@ static void sfwb_sample_http(SFLSampler *sampler, ngx_connection_t *connection, 
     httpElem.flowType.http.referrer.len = referrer->len;
     httpElem.flowType.http.useragent.str = useragent->data;
     httpElem.flowType.http.useragent.len = useragent->len;
+    httpElem.flowType.http.xff.str = xff->data;
+    httpElem.flowType.http.xff.len = xff->len;
     httpElem.flowType.http.authuser.str = authuser->data;
     httpElem.flowType.http.authuser.len = authuser->len;
     httpElem.flowType.http.mimetype.str = mimetype->data;
     httpElem.flowType.http.mimetype.len = mimetype->len;
-    httpElem.flowType.http.bytes = bytes;
+    httpElem.flowType.http.req_bytes = req_bytes;
+    httpElem.flowType.http.resp_bytes = resp_bytes;
     httpElem.flowType.http.uS = duration_uS;
     httpElem.flowType.http.status = status;
     SFLADD_ELEMENT(&fs, &httpElem);
@@ -349,9 +353,23 @@ static void sfwb_cb_error(void *magic, SFLAgent *agent, char *msg)
 static void sfwb_cb_counters(void *magic, SFLPoller *poller, SFL_COUNTERS_SAMPLE_TYPE *cs)
 {
     SFWB *sm = (SFWB *)poller->magic;
+    SFLCounters_sample_element parElem;
+    uint32_t parent_ds_index;
+
     if(sfwb_config_polling_secs(sm->config_manager, sm->log)) {
-        /* counters have been accumulated into this shared-memory block, so we can just submit it */
+        /* counters have been accumulated here */
         SFLADD_ELEMENT(cs, &sm->http_counters);
+
+        parent_ds_index = sfwb_config_parent_ds_index(sm->config_manager, sm->log);
+        if(parent_ds_index) {
+            /* we learned the parent_ds_index from the config file, so add a parent structure too. */
+            memset(&parElem, 0, sizeof(parElem));
+            parElem.tag = SFLCOUNTERS_HOST_PAR;
+            parElem.counterBlock.host_par.dsClass = SFL_DSCLASS_PHYSICAL_ENTITY;
+            parElem.counterBlock.host_par.dsIndex = parent_ds_index;
+            SFLADD_ELEMENT(cs, &parElem);
+        }
+
         sfl_poller_writeCountersSample(poller, cs);
     }
 }
@@ -488,16 +506,18 @@ static void sfwb_init(SFWB *sm, ngx_conf_t *cf)
     sm->http_counters.tag = SFLCOUNTERS_HTTP;
 
     /* look up some vars by name and cache the index numbers -- see ngx_http_variables.c */
-    ngx_str_t str_uri = ngx_string("uri");
+    ngx_str_t str_uri = ngx_string("request_uri"); // the "unparsed" variant
     ngx_str_t str_host = ngx_string("http_host");
     ngx_str_t str_referer = ngx_string("http_referer");
     ngx_str_t str_useragent = ngx_string("http_user_agent");
+    ngx_str_t str_xff = ngx_string("http_x_forwarded_for");
     ngx_str_t str_mimetype = ngx_string("content_type");
     ngx_str_t str_authuser = ngx_string("remote_user");
     sm->vidx_uri = ngx_http_get_variable_index(cf, &str_uri);
     sm->vidx_host = ngx_http_get_variable_index(cf, &str_host);
     sm->vidx_referer = ngx_http_get_variable_index(cf, &str_referer);
     sm->vidx_useragent = ngx_http_get_variable_index(cf, &str_useragent);
+    sm->vidx_xff = ngx_http_get_variable_index(cf, &str_xff);
     sm->vidx_mimetype = ngx_http_get_variable_index(cf, &str_mimetype);
     sm->vidx_authuser = ngx_http_get_variable_index(cf, &str_authuser);
 
@@ -612,9 +632,11 @@ ngx_http_sflow_handler(ngx_http_request_t *r)
                          ngx_http_get_indexed_variable(r, cf->sfwb->vidx_host),
                          ngx_http_get_indexed_variable(r, cf->sfwb->vidx_referer),
                          ngx_http_get_indexed_variable(r, cf->sfwb->vidx_useragent),
+                         ngx_http_get_indexed_variable(r, cf->sfwb->vidx_xff),
                          ngx_http_get_indexed_variable(r, cf->sfwb->vidx_authuser),
                          ngx_http_get_indexed_variable(r, cf->sfwb->vidx_mimetype),
-                         ngx_max(0, (r->connection->sent - r->header_size))/*body-bytes to match apache*/,
+                         0, /* not sure if nginx tracks anything like "bytes-received-last-request" */
+                         ngx_max(0, (r->connection->sent - r->header_size))/* body-bytes to match apach e*/,
                          (ms * 1000)/*duration_uS*/,
                          status);
         
@@ -627,7 +649,7 @@ ngx_http_sflow_handler(ngx_http_request_t *r)
         /* one advantage of this approach is that we only have to generate a new random number when we
            take a sample,  and because we have the mutex locked we don't need to make the random number
            seed a per-thread variable. */
-        while(ngx_http_sflow_add_random_skip(cf->sfwb) < 0) {
+        while(ngx_http_sflow_add_random_skip(cf->sfwb) <= 0) {
             cf->sfwb->sampler->dropEvents++;
         }
         

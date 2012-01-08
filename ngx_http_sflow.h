@@ -107,26 +107,29 @@ typedef struct _SFLSampled_http {
   SFLString host;              /* Host value from request header */
   SFLString referrer;          /* Referer value from request header */
   SFLString useragent;         /* User-Agent value from request header */
+  SFLString xff;               /* X-Forwarded-For from request header */
   SFLString authuser;          /* RFC 1413 identity of user*/
   SFLString mimetype;          /* Mime-Type */
-  uint64_t bytes;              /* Content-Length of document transferred */
+  uint64_t req_bytes;          /* Content-Length of request */
+  uint64_t resp_bytes;         /* Content-Length of response */
   uint32_t uS;             /* duration of the operation (microseconds) */
   uint32_t status;         /* HTTP status code */
 } SFLSampled_http;
 
 #define SFLHTTP_MAX_URI_LEN 255
-#define SFLHTTP_MAX_HOST_LEN 32
+#define SFLHTTP_MAX_HOST_LEN 64
 #define SFLHTTP_MAX_REFERRER_LEN 255
-#define SFLHTTP_MAX_USERAGENT_LEN 64
+#define SFLHTTP_MAX_USERAGENT_LEN 128
+#define SFLHTTP_MAX_XFF_LEN 64
 #define SFLHTTP_MAX_AUTHUSER_LEN 32
-#define SFLHTTP_MAX_MIMETYPE_LEN 32
+#define SFLHTTP_MAX_MIMETYPE_LEN 64
 
 enum SFLFlow_type_tag {
   /* enterprise = 0, format = ... */
   SFLFLOW_EX_SOCKET4      = 2100,
   SFLFLOW_EX_SOCKET6      = 2101,
   /* SFLFLOW_MEMCACHE        = 2200, */
-  SFLFLOW_HTTP            = 2201,
+  SFLFLOW_HTTP            = 2206,
 };
 
 typedef union _SFLFlow_type {
@@ -231,15 +234,21 @@ typedef struct _SFLHTTP_counters {
 
 #define XDRSIZ_SFLHTTP_COUNTERS (15*4)
 
+typedef struct _SFLHost_par_counters {
+  uint32_t dsClass;       /* sFlowDataSource class */
+  uint32_t dsIndex;       /* sFlowDataSource index */
+} SFLHost_par_counters;
+
 /* Counters data */
 
 enum SFLCounters_type_tag {
   /* enterprise = 0, format = ... */
-  /* SFLCOUNTERS_MEMCACHE      = 2200, */ /* memcached counters */
+  SFLCOUNTERS_HOST_PAR      = 2002, /* host parent */
   SFLCOUNTERS_HTTP          = 2201, /* http counters */
 };
 
 typedef union _SFLCounters_type {
+  SFLHost_par_counters host_par;
   SFLHTTP_counters http;
 } SFLCounters_type;
 

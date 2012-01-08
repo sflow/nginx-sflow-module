@@ -179,6 +179,10 @@ static SFWBConfig *sfwb_readConfig(SFWBConfigManager *sm, ngx_log_t *log)
                     sfwb_syntaxError(config, lineNo, "exceeded max collectors", log);
                 }
             }
+            else if(strcasecmp(tokv[0], "ds_index") == 0
+                    && sfwb_syntaxOK(config, lineNo, tokc, 2, 2, "ds_index=<int>", log)) {
+                config->parent_ds_index = strtol(tokv[1], NULL, 0);
+            }
             else if(strcasecmp(tokv[0], "header") == 0) { /* ignore */ }
             else if(strcasecmp(tokv[0], "agent") == 0) { /* ignore */ }
             else if(strncasecmp(tokv[0], "sampling.", 9) == 0) { /* ignore other sampling.<app> settings */ }
@@ -261,7 +265,7 @@ static time_t sfwb_configModifiedTime(SFWBConfigManager *sm, ngx_log_t *log) {
     struct stat statBuf;
     time_t mtime = 0;
     if(stat(sm->configFile, &statBuf) != 0) {
-        ngx_log_error(NGX_LOG_ERR, log, 0, "stat(%s) failed", sm->configFile);
+        ngx_log_debug1(NGX_LOG_DEBUG_HTTP, log, 0, "stat(%s) failed", sm->configFile);
     }
     else {
         mtime = statBuf.st_mtime;
@@ -340,6 +344,16 @@ uint32_t sfwb_config_polling_secs(SFWBConfigManager *sm, ngx_log_t *log)
 uint32_t sfwb_config_sampling_n(SFWBConfigManager *sm, ngx_log_t *log)
 {
     return sfwb_config_valid(sm) ? sm->config->sampling_n : 0;
+}
+
+/*_________________---------------------------------_____________
+  _________________   sfwb_config_parent_ds_index   _____________
+  -----------------_________________________________-------------
+*/
+
+uint32_t sfwb_config_parent_ds_index(SFWBConfigManager *sm, ngx_log_t *log)
+{
+    return sfwb_config_valid(sm) ? sm->config->parent_ds_index : 0;
 }
 
 /*_________________---------------------------__________________

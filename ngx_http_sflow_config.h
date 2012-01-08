@@ -47,6 +47,7 @@ typedef struct _SFWBConfig {
     SFLAddress agentIP;
     uint32_t num_collectors;
     SFWBCollector collectors[SFWB_MAX_COLLECTORS];
+    uint32_t parent_ds_index;
     ngx_pool_t *pool;
 } SFWBConfig;
 
@@ -67,6 +68,7 @@ void sfwb_config_init(SFWBConfigManager *sm, ngx_log_t *log);
 SFLAddress *sfwb_config_agentIP(SFWBConfigManager *sm, ngx_log_t *log);
 uint32_t sfwb_config_polling_secs(SFWBConfigManager *sm, ngx_log_t *log);
 uint32_t sfwb_config_sampling_n(SFWBConfigManager *sm, ngx_log_t *log);
+uint32_t sfwb_config_parent_ds_index(SFWBConfigManager *sm, ngx_log_t *log);
 bool_t sfwb_config_valid(SFWBConfigManager *sm);
 
 #endif /* NGX_HTTP_SFLOW_CONFIG_H */
