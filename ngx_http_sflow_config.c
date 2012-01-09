@@ -85,20 +85,19 @@ static void sfwb_syntaxError(SFWBConfig *cfg, uint32_t line, char *msg, ngx_log_
 
 static SFWBConfig *sfwb_readConfig(SFWBConfigManager *sm, ngx_log_t *log)
 {
+    FILE *cfg = NULL;
+    if((cfg = fopen(sm->configFile, "r")) == NULL) {
+        ngx_log_debug2(NGX_LOG_ERR, log, 0, "cannot open config file %s : %s", sm->configFile, strerror(errno));
+        return NULL;
+    }
+
     uint32_t rev_start = 0;
     uint32_t rev_end = 0;
 
     /* create a sub-pool to allocate this new config from */
     ngx_pool_t *pool = ngx_create_pool(SFWB_CONFIG_POOL_SIZ, log);
     SFWBConfig *config = ngx_pcalloc(pool, sizeof(SFWBConfig));
-    /* remember my own subpool */
-    config->pool = pool;
 
-    FILE *cfg = NULL;
-    if((cfg = fopen(sm->configFile, "r")) == NULL) {
-        ngx_log_error(NGX_LOG_ERR, log, 0, "cannot open config file %s : %s", sm->configFile, strerror(errno));
-        return NULL;
-    }
     char line[SFWB_MAX_LINELEN+1];
     uint32_t lineNo = 0;
     char *tokv[5];
@@ -196,12 +195,19 @@ static SFWBConfig *sfwb_readConfig(SFWBConfigManager *sm, ngx_log_t *log)
     fclose(cfg);
     
     /* sanity checks... */
-    
-    if(config->agentIP.type == SFLADDRESSTYPE_UNDEFINED) {
+
+    if(lineNo <= 1) {
+        /* silently ignore an empty file - treat the same as missing */
+        config->error = true;
+    }
+    else if(config->agentIP.type == SFLADDRESSTYPE_UNDEFINED) {
+        /* make sure we got an agentIP. Log error if not. */
         sfwb_syntaxError(config, 0, "agentIP=<IP address>|<IPv6 address>", log);
     }
     
     if((rev_start == rev_end) && !config->error) {
+        /* remember my own subpool */
+        config->pool = pool;
         return config;
     }
     else {
@@ -237,23 +243,27 @@ static void sfwb_config_changed(SFWBConfigManager *sm, ngx_log_t *log)
 
 static bool_t sfwb_apply_config(SFWBConfigManager *sm, SFWBConfig *config, ngx_log_t *log)
 {
-    bool_t changed = false;
-    SFWBConfig *oldConfig = sm->config;
-
-    if(config) {
-        /* apply the new one */
-        sm->config = config;
-        changed = true;
+    if(config == sm->config) {
+        return false;
     }
+
+    SFWBConfig *oldConfig = sm->config;
+    sm->config = config;
 
     if(oldConfig) {
         /* free the old one */
-        ngx_destroy_pool(oldConfig->pool);
+        /* this will destroy the oldConfig object too */
+        ngx_pool_t *pool = oldConfig->pool;
+        oldConfig->pool = NULL;
+        ngx_destroy_pool(pool);
     }
-    if(changed) {
-        sfwb_config_changed(sm, log);
+    
+    if(config == NULL) {
+        sm->configFile_modTime = 0;
     }
-    return changed;
+
+    sfwb_config_changed(sm, log);
+    return true;
 }
 
 /*_________________---------------------------__________________
