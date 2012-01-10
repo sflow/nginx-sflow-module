@@ -74,6 +74,8 @@ typedef struct _SFWB {
     ngx_int_t vidx_mimetype;
     ngx_int_t vidx_authuser;
 
+    /* lowest port*/
+    int32_t lowestPort;
 } SFWB;
 
 typedef struct {
@@ -278,6 +280,10 @@ static void sfwb_sample_http(SFLSampler *sampler, ngx_connection_t *connection, 
         struct sockaddr_in *localsoc = (struct sockaddr_in *)connection->local_sockaddr;
         struct sockaddr_in *peersoc = (struct sockaddr_in *)connection->sockaddr;
 
+        /* it looks like these fields may be accessible as variables that we can ask for
+           as indexed variables.  This fn should probably just accept the request as arg
+           and get all the vars from that $$$ */
+
         if(localsoc && peersoc) {
             if(peersoc->sin_family == AF_INET) {
                 socElem.tag = SFLFLOW_EX_SOCKET4;
@@ -400,6 +406,21 @@ static int32_t ngx_http_sflow_add_random_skip(SFWB *sm)
 }
 
 /*_________________---------------------------__________________
+  _________________ lowest active listen port __________________
+  -----------------___________________________------------------
+*/
+
+#ifndef DEFAULT_HTTP_PORT
+#define DEFAULT_HTTP_PORT 80
+#endif
+
+static uint16_t lowestActiveListenPort(SFWB *sm, ngx_log_t *log)
+{
+    // actually we already looked this up and saved it in sm
+    return (sm->lowestPort == -1) ?  DEFAULT_HTTP_PORT : (u_int16_t)sm->lowestPort;
+}
+
+/*_________________---------------------------__________________
   _________________       sfwb_changed        __________________
   -----------------___________________________------------------
 
@@ -442,9 +463,8 @@ static void sfwb_changed(SFWB *sm, ngx_log_t *log)
     
     /* add a <logicalEntity> datasource to represent this application instance */
     SFLDataSource_instance dsi;
-    /* ds_class = <logicalEntity>, ds_index = 65538, ds_instance = 0 */
-    /* $$$ should learn the ds_index from the config file */
-    SFL_DS_SET(dsi, SFL_DSCLASS_LOGICAL_ENTITY, 65538, 0);
+    /* ds_class = <logicalEntity>, ds_index = <lowest service port>, ds_instance = 0 */
+    SFL_DS_SET(dsi, SFL_DSCLASS_LOGICAL_ENTITY, lowestActiveListenPort(sm, log), 0);
     
     /* add a poller for the counters */
     sm->poller = sfl_agent_addPoller(sm->agent, &dsi, sm, sfwb_cb_counters);
@@ -670,6 +690,8 @@ ngx_http_sflow_init(ngx_conf_t *cf)
     ngx_http_handler_pt        *h;
     ngx_http_sflow_main_conf_t   *smcf;
     ngx_http_core_main_conf_t  *cmcf;
+    uint32_t ii;
+    int32_t lowestPort;
 
     smcf = ngx_http_conf_get_module_main_conf(cf, ngx_http_sflow_module);
     cmcf = ngx_http_conf_get_module_main_conf(cf, ngx_http_core_module);
@@ -679,8 +701,19 @@ ngx_http_sflow_init(ngx_conf_t *cf)
     }
     *h = ngx_http_sflow_handler;
 
+    // get the lowest numbered listen port while we have cmcf
+    lowestPort = -1;
+    if(cmcf->ports) {
+        ngx_http_conf_port_t *port = (ngx_http_conf_port_t *)cmcf->ports->elts;
+        for (ii = 0; ii < cmcf->ports->nelts; ii++) {
+            in_port_t pt = ntohs(port[ii].port);
+            if(lowestPort == -1 || 
+               (int)pt < lowestPort) lowestPort = (int)pt;
+        }
+    }
 
     smcf->sfwb = ngx_pcalloc(cf->pool, sizeof(SFWB));
+    smcf->sfwb->lowestPort = lowestPort;
     sfwb_init(smcf->sfwb, cf);
 
     return NGX_OK;

@@ -257,10 +257,6 @@ static bool_t sfwb_apply_config(SFWBConfigManager *sm, SFWBConfig *config, ngx_l
         oldConfig->pool = NULL;
         ngx_destroy_pool(pool);
     }
-    
-    if(config == NULL) {
-        sm->configFile_modTime = 0;
-    }
 
     sfwb_config_changed(sm, log);
     return true;
@@ -297,6 +293,7 @@ bool_t sfwb_config_tick(SFWBConfigManager *sm, ngx_log_t *log) {
         if(modTime == 0) {
             /* config file missing */
             changed = sfwb_apply_config(sm, NULL, log);
+            sm->configFile_modTime = 0;
         }
         else if(modTime != sm->configFile_modTime) {
             /* config file modified */
