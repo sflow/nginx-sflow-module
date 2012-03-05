@@ -378,7 +378,7 @@ void sfwb_config_send_packet(SFWBConfigManager *sm,  u_char *pkt, uint32_t pktLe
 
     for(c = 0; c < sm->config->num_collectors; c++) {
         SFWBCollector *coll = &sm->config->collectors[c];
-        socklen_t socklen;
+        socklen_t socklen=0;
         int fd=0;
         switch(coll->ipAddr.type) {
         case SFLADDRESSTYPE_UNDEFINED:
