@@ -441,10 +441,12 @@ static void sfwb_changed(SFWB *sm, ngx_log_t *log)
     
     sm->agent = (SFLAgent *)ngx_pcalloc(sm->masterPool, sizeof(SFLAgent));
     
+    uint16_t servicePort = lowestActiveListenPort(sm, log);
+
     /* initialize the agent with it's address, bootime, callbacks etc. */
     sfl_agent_init(sm->agent,
                    sfwb_config_agentIP(sm->config_manager, log),
-                   0, /* subAgentId */
+                   servicePort, /* subAgentId */
                    sm->currentTime,
                    sm->currentTime,
                    sm,
@@ -464,7 +466,7 @@ static void sfwb_changed(SFWB *sm, ngx_log_t *log)
     /* add a <logicalEntity> datasource to represent this application instance */
     SFLDataSource_instance dsi;
     /* ds_class = <logicalEntity>, ds_index = <lowest service port>, ds_instance = 0 */
-    SFL_DS_SET(dsi, SFL_DSCLASS_LOGICAL_ENTITY, lowestActiveListenPort(sm, log), 0);
+    SFL_DS_SET(dsi, SFL_DSCLASS_LOGICAL_ENTITY, servicePort, 0);
     
     /* add a poller for the counters */
     sm->poller = sfl_agent_addPoller(sm->agent, &dsi, sm, sfwb_cb_counters);
