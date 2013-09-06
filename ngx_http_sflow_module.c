@@ -4,6 +4,7 @@
 
 #include <ngx_config.h>
 #include <ngx_core.h>
+#include <ngx_event.h>
 #include <ngx_http.h>
 #include <nginx.h>
 
@@ -13,6 +14,13 @@
 
 #include "ngx_http_sflow_api.h"
 #include "ngx_http_sflow_config.h"
+
+/* I'd prefer to avoid making sflow_tick a static var but I
+   don't see how to access module state from the ngx_cycle_t
+   pointer that is given to the ngx_http_sflow_init_process
+   callback.  And it seems that we have to wait until then
+   before we can call ngx_add_timer() */
+static ngx_event_t sflow_tick;
 
 /*_________________---------------------------__________________
   _________________   unknown output defs     __________________
@@ -162,6 +170,13 @@ ngx_http_sflow_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
     return NGX_CONF_OK;
 }
 
+static ngx_int_t
+ngx_http_sflow_init_process(ngx_cycle_t *cycle)
+{
+    ngx_add_timer(&sflow_tick, 1000); // one second
+    return NGX_OK;
+}
+
 /*_________________---------------------------__________________
   _________________   ngx module registration __________________
   -----------------___________________________------------------
@@ -203,7 +218,7 @@ ngx_module_t  ngx_http_sflow_module = {
     NGX_HTTP_MODULE,                       /* module type */
     NULL,                                  /* init master */
     NULL,                                  /* init module */
-    NULL,                                  /* init process */
+    ngx_http_sflow_init_process,           /* init process */
     NULL,                                  /* init thread */
     NULL,                                  /* exit thread */
     NULL,                                  /* exit process */
@@ -565,6 +580,25 @@ static SFLHTTP_method sfwb_methodNumberLookup(int method)
     }
 }
 
+/*_________________------------------------------__________________
+  _________________  ngx_http_sflow_tick_handler __________________
+  -----------------______________________________------------------
+*/
+static void
+ngx_http_sflow_tick_handler(ngx_event_t *ev)
+{
+    SFWB *sfwb;
+    if(ev->log) {
+        ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ev->log, 0, "http sflow tick handler");
+    }
+    if((sfwb = (SFWB *)ev->data) != NULL) {
+        SFWB_LOCK(cf->sfwb);
+        sfwb_tick(sfwb, ev->log);
+        ngx_add_timer(ev, 1000);
+        SFWB_UNLOCK(cf->sfwb);
+    }
+}
+
 /*_________________---------------------------__________________
   _________________  ngx_http_sflow_handler   __________________
   -----------------___________________________------------------
@@ -579,22 +613,6 @@ ngx_http_sflow_handler(ngx_http_request_t *r)
     ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "http sflow handler");
 
     cf = ngx_http_get_module_main_conf(r, ngx_http_sflow_module);
-
-    /* approximate a 1-second tick - this assumes that we have constant activity. It may be
-       better to run a separate thread just to do this reliably and conform to the sFlow standard
-       even when nothing is happening.
-       Alternatively - it looks like we might be able to ask for timer events from the engine. $$$
-    */
-
-    if(ngx_time() != cf->sfwb->currentTime) {
-        SFWB_LOCK(cf->sfwb);
-        /* repeat the test now that we have the mutex,  in case two threads saw the second rollover */
-        if(ngx_time() != cf->sfwb->currentTime) {
-            cf->sfwb->currentTime = ngx_time();
-            sfwb_tick(cf->sfwb, r->connection->log);
-        }
-        SFWB_UNLOCK(cf->sfwb);
-    }
 
     /* sFlow may be turned off in the config file just for this location */
     lcf = ngx_http_get_module_loc_conf(r, ngx_http_sflow_module);
@@ -703,7 +721,7 @@ ngx_http_sflow_init(ngx_conf_t *cf)
     }
     *h = ngx_http_sflow_handler;
 
-    // get the lowest numbered listen port while we have cmcf
+    /* get the lowest numbered listen port while we have cmcf */
     lowestPort = -1;
     if(cmcf->ports) {
         ngx_http_conf_port_t *port = (ngx_http_conf_port_t *)cmcf->ports->elts;
@@ -717,6 +735,13 @@ ngx_http_sflow_init(ngx_conf_t *cf)
     smcf->sfwb = ngx_pcalloc(cf->pool, sizeof(SFWB));
     smcf->sfwb->lowestPort = lowestPort;
     sfwb_init(smcf->sfwb, cf);
+
+    /* initialize tick timer */
+    sflow_tick.data = smcf->sfwb;
+    sflow_tick.handler = ngx_http_sflow_tick_handler;
+    sflow_tick.log = &cf->cycle->new_log;
+    /* have to wait until ngx_http_sflow_init_process()
+       is called before we can schedule timer. */
 
     return NGX_OK;
 }
