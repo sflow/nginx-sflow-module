@@ -591,7 +591,8 @@ ngx_http_sflow_tick_handler(ngx_event_t *ev)
     if(ev->log) {
         ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ev->log, 0, "http sflow tick handler");
     }
-    if((sfwb = (SFWB *)ev->data) != NULL) {
+    if(!ngx_exiting
+       && (sfwb = (SFWB *)ev->data) != NULL) {
         SFWB_LOCK(cf->sfwb);
         sfwb_tick(sfwb, ev->log);
         ngx_add_timer(ev, 1000);
