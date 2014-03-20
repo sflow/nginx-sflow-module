@@ -1,5 +1,5 @@
 /* -*- Mode: C; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
-/* Copyright (c) 2002-2010 InMon Corp. Licensed under the terms of the InMon sFlow licence: */
+/* Copyright (c) 2002-2014 InMon Corp. Licensed under the terms of the InMon sFlow licence: */
 /* http://www.inmon.com/technology/sflowlicense.txt */
 
 #include "ngx_http_sflow_api.h"
@@ -8,27 +8,8 @@
 /* ===================== AGENT =======================*/
 
 
-static void * sflAlloc(SFLAgent *agent, size_t bytes);
-static void sflFree(SFLAgent *agent, void *obj);
 static void sfl_agent_jumpTableAdd(SFLAgent *agent, SFLSampler *sampler);
 static void sfl_agent_jumpTableRemove(SFLAgent *agent, SFLSampler *sampler);
-
-/*_________________---------------------------__________________
-  _________________       alloc and free      __________________
-  -----------------___________________________------------------
-*/
-
-static void * sflAlloc(SFLAgent *agent, size_t bytes)
-{
-    /* just assume we were given an allocFn */
-    return (*agent->allocFn)(agent->magic, agent, bytes);
-}
-
-static void sflFree(SFLAgent *agent, void *obj)
-{
-    /* just assume we were given an allocFn */
-    (*agent->freeFn)(agent->magic, agent, obj);
-}
   
 /*_________________---------------------------__________________
   _________________       error logging       __________________
@@ -54,8 +35,6 @@ void sfl_agent_init(SFLAgent *agent,
                     time_t bootTime,  /* agent boot time */
                     time_t now,       /* time now */
                     void *magic,      /* ptr to pass back in logging and alloc fns */
-                    allocFn_t allocFn,
-                    freeFn_t freeFn,
                     errorFn_t errorFn,
                     sendFn_t sendFn)
 {
@@ -67,46 +46,8 @@ void sfl_agent_init(SFLAgent *agent,
     agent->bootTime = bootTime;
     agent->now = now;
     agent->magic = magic;
-    agent->allocFn = allocFn;
-    agent->freeFn = freeFn;
     agent->errorFn = errorFn;
     agent->sendFn = sendFn;
-}
-
-/*_________________---------------------------__________________
-  _________________   sfl_agent_release       __________________
-  -----------------___________________________------------------
-*/
-
-void sfl_agent_release(SFLAgent *agent)
-{
- 
-    SFLSampler *sm;
-    SFLPoller *pl;
-    SFLReceiver *rcv;
-    /* release and free the samplers */
-    for(sm = agent->samplers; sm != NULL; ) {
-        SFLSampler *nextSm = sm->nxt;
-        sflFree(agent, sm);
-        sm = nextSm;
-    }
-    agent->samplers = NULL;
-
-    /* release and free the pollers */
-    for( pl= agent->pollers; pl != NULL; ) {
-        SFLPoller *nextPl = pl->nxt;
-        sflFree(agent, pl);
-        pl = nextPl;
-    }
-    agent->pollers = NULL;
-
-    /* release and free the receivers */
-    for( rcv = agent->receivers; rcv != NULL; ) {
-        SFLReceiver *nextRcv = rcv->nxt;
-        sflFree(agent, rcv);
-        rcv = nextRcv;
-    }
-    agent->receivers = NULL;
 }
 
 /*_________________---------------------------__________________
@@ -134,12 +75,11 @@ void sfl_agent_tick(SFLAgent *agent, time_t now)
   -----------------___________________________------------------
 */
 
-SFLReceiver *sfl_agent_addReceiver(SFLAgent *agent)
+SFLReceiver *sfl_agent_addReceiver(SFLAgent *agent, SFLReceiver *rcv)
 {
-    SFLReceiver *rcv, *r, *prev;
+    SFLReceiver *r, *prev;
 
     prev = NULL;
-    rcv = (SFLReceiver *)sflAlloc(agent, sizeof(SFLReceiver));
     sfl_receiver_init(rcv, agent);
     /* add to end of list - to preserve the receiver index numbers for existing receivers */
  
@@ -175,9 +115,11 @@ static int sfl_dsi_compare(SFLDataSource_instance *pdsi1, SFLDataSource_instance
   -----------------___________________________------------------
 */
 
-SFLSampler *sfl_agent_addSampler(SFLAgent *agent, SFLDataSource_instance *pdsi)
+SFLSampler *sfl_agent_addSampler(SFLAgent *agent,
+                                 SFLDataSource_instance *pdsi,
+                                 SFLSampler *newsm)
 {
-    SFLSampler *newsm, *prev, *sm, *test;
+    SFLSampler *prev, *sm, *test;
 
     prev = NULL;
     sm = agent->samplers;
@@ -188,7 +130,6 @@ SFLSampler *sfl_agent_addSampler(SFLAgent *agent, SFLDataSource_instance *pdsi)
         if(cmp < 0) break;       /* insert here */
     }
     /* either we found the insert point, or reached the end of the list... */
-    newsm = (SFLSampler *)sflAlloc(agent, sizeof(SFLSampler));
     sfl_sampler_init(newsm, agent, pdsi);
     if(prev) prev->nxt = newsm;
     else agent->samplers = newsm;
@@ -215,10 +156,9 @@ SFLSampler *sfl_agent_addSampler(SFLAgent *agent, SFLDataSource_instance *pdsi)
 SFLPoller *sfl_agent_addPoller(SFLAgent *agent,
                                SFLDataSource_instance *pdsi,
                                void *magic,         /* ptr to pass back in getCountersFn() */
-                               getCountersFn_t getCountersFn)
+                               getCountersFn_t getCountersFn,
+                               SFLPoller *newpl)
 {
-    SFLPoller *newpl;
-
     /* keep the list sorted */
     SFLPoller *prev = NULL, *pl = agent->pollers;
     for(; pl != NULL; prev = pl, pl = pl->nxt) {
@@ -227,56 +167,11 @@ SFLPoller *sfl_agent_addPoller(SFLAgent *agent,
         if(cmp < 0) break;       /* insert here */
     }
     /* either we found the insert point, or reached the end of the list... */
-    newpl = (SFLPoller *)sflAlloc(agent, sizeof(SFLPoller));
     sfl_poller_init(newpl, agent, pdsi, magic, getCountersFn);
     if(prev) prev->nxt = newpl;
     else agent->pollers = newpl;
     newpl->nxt = pl;
     return newpl;
-}
-
-/*_________________---------------------------__________________
-  _________________  sfl_agent_removeSampler  __________________
-  -----------------___________________________------------------
-*/
-
-int sfl_agent_removeSampler(SFLAgent *agent, SFLDataSource_instance *pdsi)
-{
-    SFLSampler *prev, *sm;
-
-    /* find it, unlink it and free it */
-    for(prev = NULL, sm = agent->samplers; sm != NULL; prev = sm, sm = sm->nxt) {
-        if(sfl_dsi_compare(pdsi, &sm->dsi) == 0) {
-            if(prev == NULL) agent->samplers = sm->nxt;
-            else prev->nxt = sm->nxt;
-            sfl_agent_jumpTableRemove(agent, sm);
-            sflFree(agent, sm);
-            return 1;
-        }
-    }
-    /* not found */
-    return 0;
-}
-
-/*_________________---------------------------__________________
-  _________________  sfl_agent_removePoller   __________________
-  -----------------___________________________------------------
-*/
-
-int sfl_agent_removePoller(SFLAgent *agent, SFLDataSource_instance *pdsi)
-{
-    SFLPoller *prev, *pl;
-    /* find it, unlink it and free it */
-    for(prev = NULL, pl = agent->pollers; pl != NULL; prev = pl, pl = pl->nxt) {
-        if(sfl_dsi_compare(pdsi, &pl->dsi) == 0) {
-            if(prev == NULL) agent->pollers = pl->nxt;
-            else prev->nxt = pl->nxt;
-            sflFree(agent, pl);
-            return 1;
-        }
-    }
-    /* not found */
-    return 0;
 }
 
 /*_________________--------------------------------__________________
@@ -734,7 +629,7 @@ void sfl_poller_set_sFlowCpInterval(SFLPoller *poller, uint32_t sFlowCpInterval)
     /* Set the countersCountdown to be a randomly selected value between 1 and
        sFlowCpInterval. That way the counter polling would be desynchronised
        (on a 200-port switch, polling all the counters in one second could be harmful). */
-    poller->countersCountdown = sfl_random(sFlowCpInterval);
+    poller->countersCountdown = sFlowCpInterval ? sfl_random(sFlowCpInterval) : 0;
 }
 
 /*_________________---------------------------------__________________

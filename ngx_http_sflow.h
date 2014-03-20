@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2010 InMon Corp. Licensed under the terms of the InMon sFlow licence: */
+/* Copyright (c) 2002-2014 InMon Corp. Licensed under the terms of the InMon sFlow licence: */
 /* http://www.inmon.com/technology/sflowlicense.txt */
 
 #ifndef SFLOW_H

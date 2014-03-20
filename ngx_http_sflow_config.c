@@ -1,5 +1,5 @@
 /* -*- Mode: C; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
-/* Copyright (c) 2002-2010 InMon Corp. Licensed under the terms of the InMon sFlow licence: */
+/* Copyright (c) 2002-2014 InMon Corp. Licensed under the terms of the InMon sFlow licence: */
 /* http://www.inmon.com/technology/sflowlicense.txt */
 
 #include <ngx_config.h>
@@ -95,8 +95,10 @@ static SFWBConfig *sfwb_readConfig(SFWBConfigManager *sm, ngx_log_t *log)
     uint32_t rev_end = 0;
 
     /* create a sub-pool to allocate this new config from */
-    ngx_pool_t *pool = ngx_create_pool(SFWB_CONFIG_POOL_SIZ, log);
-    SFWBConfig *config = ngx_pcalloc(pool, sizeof(SFWBConfig));
+    //ngx_pool_t *pool = ngx_create_pool(SFWB_CONFIG_POOL_SIZ, log);
+    //SFWBConfig *config = ngx_pcalloc(pool, sizeof(SFWBConfig));
+    SFWBConfig *config = &sm->configs[sm->configToggle ? 0 : 1];
+    memset(config, 0, sizeof(SFWBConfig));
 
     char line[SFWB_MAX_LINELEN+1];
     uint32_t lineNo = 0;
@@ -207,11 +209,11 @@ static SFWBConfig *sfwb_readConfig(SFWBConfigManager *sm, ngx_log_t *log)
     
     if((rev_start == rev_end) && !config->error) {
         /* remember my own subpool */
-        config->pool = pool;
+        // config->pool = pool;
         return config;
     }
     else {
-        ngx_destroy_pool(pool);
+        // ngx_destroy_pool(pool);
         return NULL;
     }
 }
@@ -223,17 +225,7 @@ static SFWBConfig *sfwb_readConfig(SFWBConfigManager *sm, ngx_log_t *log)
 
 static void sfwb_config_changed(SFWBConfigManager *sm, ngx_log_t *log)
 {
-    if(sfwb_config_valid(sm)) {
-        /* make sure the send sockets are open - one for v4 and another for v6 */
-        if(sm->socket4 <= 0) {
-            if((sm->socket4 = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
-                ngx_log_error(NGX_LOG_ERR, log, 0, "IPv4 send socket open failed : %s", strerror(errno));
-        }
-        if(sm->socket6 <= 0) {
-            if((sm->socket6 = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP)) == -1)
-                ngx_log_error(NGX_LOG_ERR, log, 0, "IPv6 send socket open failed : %s", strerror(errno));
-        }
-    }
+    /* used to open sockets here - now done in config_init */
 }
 
 /*_________________---------------------------__________________
@@ -253,9 +245,9 @@ static bool_t sfwb_apply_config(SFWBConfigManager *sm, SFWBConfig *config, ngx_l
     if(oldConfig) {
         /* free the old one */
         /* this will destroy the oldConfig object too */
-        ngx_pool_t *pool = oldConfig->pool;
-        oldConfig->pool = NULL;
-        ngx_destroy_pool(pool);
+        //ngx_pool_t *pool = oldConfig->pool;
+        //oldConfig->pool = NULL;
+        //ngx_destroy_pool(pool);
     }
 
     sfwb_config_changed(sm, log);
@@ -328,7 +320,7 @@ bool_t sfwb_config_valid(SFWBConfigManager *sm)
   -----------------____________________________------------------
 */
 
-SFLAddress *sfwb_config_agentIP(SFWBConfigManager *sm, ngx_log_t *log)
+SFLAddress *sfwb_config_agentIP(SFWBConfigManager *sm)
 {
     return sfwb_config_valid(sm) ? &sm->config->agentIP : NULL;
 }
@@ -338,7 +330,7 @@ SFLAddress *sfwb_config_agentIP(SFWBConfigManager *sm, ngx_log_t *log)
   -----------------____________________________------------------
 */
 
-uint32_t sfwb_config_polling_secs(SFWBConfigManager *sm, ngx_log_t *log)
+uint32_t sfwb_config_polling_secs(SFWBConfigManager *sm)
 {
     return sfwb_config_valid(sm) ? sm->config->polling_secs : 0;
 }
@@ -348,7 +340,7 @@ uint32_t sfwb_config_polling_secs(SFWBConfigManager *sm, ngx_log_t *log)
   -----------------____________________________------------------
 */
 
-uint32_t sfwb_config_sampling_n(SFWBConfigManager *sm, ngx_log_t *log)
+uint32_t sfwb_config_sampling_n(SFWBConfigManager *sm)
 {
     return sfwb_config_valid(sm) ? sm->config->sampling_n : 0;
 }
@@ -358,7 +350,7 @@ uint32_t sfwb_config_sampling_n(SFWBConfigManager *sm, ngx_log_t *log)
   -----------------_________________________________-------------
 */
 
-uint32_t sfwb_config_parent_ds_index(SFWBConfigManager *sm, ngx_log_t *log)
+uint32_t sfwb_config_parent_ds_index(SFWBConfigManager *sm)
 {
     return sfwb_config_valid(sm) ? sm->config->parent_ds_index : 0;
 }
@@ -371,6 +363,13 @@ uint32_t sfwb_config_parent_ds_index(SFWBConfigManager *sm, ngx_log_t *log)
 void sfwb_config_send_packet(SFWBConfigManager *sm,  u_char *pkt, uint32_t pktLen, ngx_log_t *log)
 {
     uint32_t c = 0;
+
+    ngx_log_debug3(NGX_LOG_DEBUG_HTTP, log, 0,
+                   "sflow: sfwb_config_send_packet process %d configOK=%s num_collectors=%d",
+                   ngx_process_slot,
+                   sm->config ? "YES":"NO",
+                   sm->config ? sm->config->num_collectors : 0);
+
     if(!sm->config) {
         /* config is disabled */
         return;
@@ -432,5 +431,19 @@ void sfwb_config_send_packet(SFWBConfigManager *sm,  u_char *pkt, uint32_t pktLe
 void sfwb_config_init(SFWBConfigManager *sm, ngx_log_t *log)
 {
     sm->configFile = SFWB_DEFAULT_CONFIGFILE;
+    /* make sure the send sockets are open - one for v4 and another for v6.
+     * have to do it early like this so that the sockets are shared with the
+     * forked workers.
+     */
+    if(sm->socket4 <= 0) {
+        if((sm->socket4 = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
+            ngx_log_error(NGX_LOG_ERR, log, 0, "IPv4 send socket open failed : %s", strerror(errno));
+    }
+#if (NGX_HAVE_INET6)
+    if(sm->socket6 <= 0) {
+        if((sm->socket6 = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP)) == -1)
+            ngx_log_error(NGX_LOG_ERR, log, 0, "IPv6 send socket open failed : %s", strerror(errno));
+    }
+#endif
 }
 

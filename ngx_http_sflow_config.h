@@ -1,5 +1,5 @@
 /* -*- Mode: C; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
-/* Copyright (c) 2002-2010 InMon Corp. Licensed under the terms of the InMon sFlow licence: */
+/* Copyright (c) 2002-2014 InMon Corp. Licensed under the terms of the InMon sFlow licence: */
 /* http://www.inmon.com/technology/sflowlicense.txt */
 
 #ifndef NGX_HTTP_SFLOW_CONFIG_H
@@ -48,7 +48,7 @@ typedef struct _SFWBConfig {
     uint32_t num_collectors;
     SFWBCollector collectors[SFWB_MAX_COLLECTORS];
     uint32_t parent_ds_index;
-    ngx_pool_t *pool;
+    // ngx_pool_t *pool;
 } SFWBConfig;
 
 
@@ -58,6 +58,8 @@ typedef struct _SFWBConfigManager {
     char *configFile;
     time_t configFile_modTime;
     SFWBConfig *config;
+    SFWBConfig configs[2];
+    int configToggle;
     int socket4;
     int socket6;
 } SFWBConfigManager;
@@ -65,10 +67,10 @@ typedef struct _SFWBConfigManager {
 bool_t sfwb_config_tick(SFWBConfigManager *sm, ngx_log_t *log);
 void sfwb_config_send_packet(SFWBConfigManager *sm,  u_char *pkt, uint32_t pktLen, ngx_log_t *log);
 void sfwb_config_init(SFWBConfigManager *sm, ngx_log_t *log);
-SFLAddress *sfwb_config_agentIP(SFWBConfigManager *sm, ngx_log_t *log);
-uint32_t sfwb_config_polling_secs(SFWBConfigManager *sm, ngx_log_t *log);
-uint32_t sfwb_config_sampling_n(SFWBConfigManager *sm, ngx_log_t *log);
-uint32_t sfwb_config_parent_ds_index(SFWBConfigManager *sm, ngx_log_t *log);
+SFLAddress *sfwb_config_agentIP(SFWBConfigManager *sm);
+uint32_t sfwb_config_polling_secs(SFWBConfigManager *sm);
+uint32_t sfwb_config_sampling_n(SFWBConfigManager *sm);
+uint32_t sfwb_config_parent_ds_index(SFWBConfigManager *sm);
 bool_t sfwb_config_valid(SFWBConfigManager *sm);
 
 #endif /* NGX_HTTP_SFLOW_CONFIG_H */

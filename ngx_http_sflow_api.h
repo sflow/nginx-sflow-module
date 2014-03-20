@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2010 InMon Corp. Licensed under the terms of the InMon sFlow licence: */
+/* Copyright (c) 2002-2014 InMon Corp. Licensed under the terms of the InMon sFlow licence: */
 /* http://www.inmon.com/technology/sflowlicense.txt */
 
 /* 
@@ -145,14 +145,6 @@ typedef struct _SFLPoller {
   uint32_t countersSampleSeqNo;
 } SFLPoller;
 
-typedef void *(*allocFn_t)(void *magic,               /* callback to allocate space on heap */
-			   struct _SFLAgent *agent,   /* called with self */
-			   size_t bytes);             /* bytes requested */
-
-typedef int (*freeFn_t)(void *magic,                  /* callback to free space on heap */
-			struct _SFLAgent *agent,      /* called with self */
-			void *obj);                   /* obj to free */
-
 typedef void (*errorFn_t)(void *magic,                /* callback to log error message */
 			  struct _SFLAgent *agent,    /* called with self */
 			  char *msg);                 /* error message */
@@ -176,9 +168,7 @@ typedef struct _SFLAgent {
   time_t now;             /* time now */
   SFLAddress myIP;        /* IP address of this node */
   uint32_t subId;        /* sub_agent_id */
-  void *magic;            /* ptr to pass back in logging and alloc fns */
-  allocFn_t allocFn;
-  freeFn_t freeFn;
+  void *magic;            /* ptr to pass back */
   errorFn_t errorFn;
   sendFn_t sendFn;
 } SFLAgent;
@@ -189,32 +179,24 @@ void sfl_agent_init(SFLAgent *agent,
 		    uint32_t subId,  /* agent_sub_id */
 		    time_t bootTime,  /* agent boot time */
 		    time_t now,       /* time now */
-		    void *magic,      /* ptr to pass back in logging and alloc fns */
-		    allocFn_t allocFn,
-		    freeFn_t freeFn,
+		    void *magic,      /* ptr to pass back */
 		    errorFn_t errorFn,
 		    sendFn_t sendFn);
 
 /* call this to create samplers */
-SFLSampler *sfl_agent_addSampler(SFLAgent *agent, SFLDataSource_instance *pdsi);
+SFLSampler *sfl_agent_addSampler(SFLAgent *agent,
+				 SFLDataSource_instance *pdsi,
+				 SFLSampler *newsm);
 
 /* call this to create pollers */
 SFLPoller *sfl_agent_addPoller(SFLAgent *agent,
 			       SFLDataSource_instance *pdsi,
 			       void *magic, /* ptr to pass back in getCountersFn() */
-			       getCountersFn_t getCountersFn);
+			       getCountersFn_t getCountersFn,
+			       SFLPoller *newpl);
 
 /* call this to create receivers */
-SFLReceiver *sfl_agent_addReceiver(SFLAgent *agent);
-
-/* call this to remove samplers */
-int sfl_agent_removeSampler(SFLAgent *agent, SFLDataSource_instance *pdsi);
-
-/* call this to remove pollers */
-int sfl_agent_removePoller(SFLAgent *agent, SFLDataSource_instance *pdsi);
-
-/* note: receivers should not be removed. Typically the receivers
-   list will be created at init time and never changed */
+SFLReceiver *sfl_agent_addReceiver(SFLAgent *agent, SFLReceiver *rcv);
 
 /* call these fns to retrieve sampler, poller or receiver (e.g. for SNMP GET or GETNEXT operation) */
 SFLSampler  *sfl_agent_getSampler(SFLAgent *agent, SFLDataSource_instance *pdsi);
@@ -289,10 +271,6 @@ void sfl_sampler_writeEncodedFlowSample(SFLSampler *sampler, char *xdrBytes, uin
 
 /* call this to push counters samples (usually done in the getCountersFn callback) */
 void sfl_poller_writeCountersSample(SFLPoller *poller, SFL_COUNTERS_SAMPLE_TYPE *cs);
-
-/* call this to deallocate resources */
-void sfl_agent_release(SFLAgent *agent);
-
 
 /* internal fns */
 
