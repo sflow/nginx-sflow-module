@@ -217,6 +217,30 @@ ngx_http_sflow_get_shm_data() {
     }
     return (ngx_http_sflow_shm_data_t *)ngx_http_sflow_shm_zone->data;
 }
+
+/*_________________---------------------------------__________________
+  _________________  ngx_http_sflow_slab_alloc      __________________
+  -----------------_________________________________------------------
+*/
+
+static size_t
+ngx_http_sflow_slab_alloc_size(size_t bytes) {
+    /* round up to pagesize, because smaller allocations
+       were failing and returning NULL on openSUSE-12.2 32bit
+    */
+    return ngx_align(bytes, ngx_pagesize);
+}
+
+static void *
+ngx_http_sflow_slab_alloc(ngx_slab_pool_t *pool, size_t bytes) {
+    size_t adjusted = ngx_http_sflow_slab_alloc_size(bytes);
+    void *ans = ngx_slab_alloc(pool, adjusted);
+    if(ans == NULL && sflow_tick.log) {
+        ngx_log_error(NGX_LOG_ERR, sflow_tick.log, 0, "ngx_slab_alloc(%d) failed: (errno=%d)", adjusted, errno);
+    }
+    return ans;
+}
+    
  
 /*_________________------------------------------------__________________
   _________________  ngx_http_sflow_update_shm_slot    __________________
@@ -767,14 +791,19 @@ ngx_http_sflow_init_shm(ngx_shm_zone_t *shm_zone, void *data)
      * put in place for us at the beginning of this segment.
      */
     shm_pool = (ngx_slab_pool_t *)shm_zone->shm.addr;
-    shm_data = shm_zone->data = ngx_slab_alloc(shm_pool, sizeof(ngx_http_sflow_shm_data_t));
+    shm_data = shm_zone->data = ngx_http_sflow_slab_alloc(shm_pool, sizeof(ngx_http_sflow_shm_data_t));
+    if(shm_data == NULL) {
+        return NGX_ERROR;
+    }
 
     /* initialize the agent with it's address, bootime, callbacks etc. */
     uint16_t servicePort = sfwb_lowestActiveListenPort();
     time_t now = ngx_time();
     memset(&emptyAgentIP, 0, sizeof(SFLAddress));
-    shm_data->agent = (SFLAgent *)ngx_slab_alloc(shm_pool, sizeof(SFLAgent));
-
+    shm_data->agent = (SFLAgent *)ngx_http_sflow_slab_alloc(shm_pool, sizeof(SFLAgent));
+    if(shm_data->agent == NULL) {
+        return NGX_ERROR;
+    }
     sfl_agent_init(shm_data->agent,
                    &emptyAgentIP,
                    servicePort, /* subAgentId */
@@ -785,7 +814,10 @@ ngx_http_sflow_init_shm(ngx_shm_zone_t *shm_zone, void *data)
                    sfwb_cb_sendPkt);
     
     /* add a receiver */
-    shm_data->receiver = (SFLReceiver *)ngx_slab_alloc(shm_pool, sizeof(SFLReceiver));
+    shm_data->receiver = (SFLReceiver *)ngx_http_sflow_slab_alloc(shm_pool, sizeof(SFLReceiver));
+    if(shm_data->receiver == NULL) {
+        return NGX_ERROR;
+    }
     sfl_agent_addReceiver(shm_data->agent, shm_data->receiver);
     sfl_receiver_set_sFlowRcvrOwner(shm_data->receiver, "httpd sFlow Probe");
     sfl_receiver_set_sFlowRcvrTimeout(shm_data->receiver, 0xFFFFFFFF);
@@ -799,13 +831,19 @@ ngx_http_sflow_init_shm(ngx_shm_zone_t *shm_zone, void *data)
     SFL_DS_SET(dsi, SFL_DSCLASS_LOGICAL_ENTITY, servicePort, 0);
     
     /* add a poller for the counters */
-    shm_data->poller = (SFLPoller *)ngx_slab_alloc(shm_pool, sizeof(SFLPoller));
+    shm_data->poller = (SFLPoller *)ngx_http_sflow_slab_alloc(shm_pool, sizeof(SFLPoller));
+    if(shm_data->poller == NULL) {
+        return NGX_ERROR;
+    }
     sfl_agent_addPoller(shm_data->agent, &dsi, NULL, sfwb_cb_counters, shm_data->poller);
     sfl_poller_set_sFlowCpInterval(shm_data->poller, 0 /* start with polling=0 */);
     sfl_poller_set_sFlowCpReceiver(shm_data->poller, 1 /* receiver index == 1 */);
     
     /* add a sampler for the sampled operations */
-    shm_data->sampler = (SFLSampler *)ngx_slab_alloc(shm_pool, sizeof(SFLSampler));
+    shm_data->sampler = (SFLSampler *)ngx_http_sflow_slab_alloc(shm_pool, sizeof(SFLSampler));
+    if(shm_data->sampler == NULL) {
+        return NGX_ERROR;
+    }
     sfl_agent_addSampler(shm_data->agent, &dsi, shm_data->sampler);
     sfl_sampler_set_sFlowFsPacketSamplingRate(shm_data->sampler, 0 /* start with sampling=0 */);
     sfl_sampler_set_sFlowFsReceiver(shm_data->sampler, 1 /* receiver index == 1 */);
@@ -1025,11 +1063,12 @@ ngx_http_sflow_init(ngx_conf_t *cf)
     ngx_http_sflow_lowest_port = lowestPort;
 
     /* init shared memory - make sure there is plenty of headroom for the slab-allocator */
-    size_t shm_size = sizeof(ngx_http_sflow_shm_data_t) + \
-        sizeof(SFLAgent) + \
-        sizeof(SFLSampler) + \
-        sizeof(SFLPoller) + \
-        sizeof(SFLReceiver);
+    size_t shm_size = \
+        ngx_http_sflow_slab_alloc_size(sizeof(ngx_http_sflow_shm_data_t)) + \
+        ngx_http_sflow_slab_alloc_size(sizeof(SFLAgent)) +              \
+        ngx_http_sflow_slab_alloc_size(sizeof(SFLSampler)) +            \
+        ngx_http_sflow_slab_alloc_size(sizeof(SFLPoller)) +             \
+        ngx_http_sflow_slab_alloc_size(sizeof(SFLReceiver));
     shm_size = (ngx_pagesize * 2) + ngx_align(shm_size, ngx_pagesize);
     /* tag the named memory segment with my module pointer to avoid unexpected aliasing */
     ngx_http_sflow_shm_zone = ngx_shared_memory_add(cf, &ngx_http_sflow_shm_name, shm_size, &ngx_http_sflow_module);
