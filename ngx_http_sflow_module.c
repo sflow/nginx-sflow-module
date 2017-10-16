@@ -75,9 +75,9 @@ typedef struct _SFWB {
     ngx_log_t *log;
 
 #if (NGX_THREADS)
-    ngx_mutex_t *mut;
-#define SFWB_LOCK(_s) ngx_mutex_lock((_s)->mut)
-#define SFWB_UNLOCK(_s) ngx_mutex_unlock((_s)->mut)
+    ngx_thread_mutex_t *mut;
+#define SFWB_LOCK(_s) ngx_thread_mutex_lock((_s)->mut, (_s)->log)
+#define SFWB_UNLOCK(_s) ngx_thread_mutex_unlock((_s)->mut, (_s)->log)
 #define SFWB_INC_CTR(_c) ngx_atomic_fetch_add(&(_c), 1)
 #define SFWB_COUNTDOWN(_c) (ngx_atomic_fetch_add(&(_c), -1) == 1)
 #else
@@ -279,10 +279,10 @@ ngx_http_sflow_tick_handler(ngx_event_t *ev)
     }
     if(!ngx_exiting
        && (sfwb = (SFWB *)ev->data) != NULL) {
-        SFWB_LOCK(cf->sfwb);
+        SFWB_LOCK(sfwb);
         ngx_http_sflow_tick(sfwb, ev->log);
         ngx_add_timer(ev, 1000);
-        SFWB_UNLOCK(cf->sfwb);
+        SFWB_UNLOCK(sfwb);
     }
 }
 
@@ -869,7 +869,7 @@ sfwb_init(SFWB *sm, ngx_conf_t *cf)
      * is more that one worker thread - right now it seems like threads are not even
      * an option in the configure script)
      */
-    sm->mut = ngx_mutex_init(cf->log, 0);
+    ngx_thread_mutex_create(sm->mut, cf->log);
 #endif
 
     /* look up some vars by name and cache the index numbers -- see ngx_http_variables.c */
